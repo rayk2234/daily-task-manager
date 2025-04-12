@@ -26,7 +26,9 @@ import {
   Select,
   MenuItem,
   Tabs,
-  Tab
+  Tab,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -35,9 +37,26 @@ import {
   Add as AddIcon,
   CheckCircle as CheckCircleIcon,
   RadioButtonUnchecked as UncheckedIcon,
-  CalendarToday as CalendarIcon
+  CalendarToday as CalendarIcon,
+  Dashboard as DashboardIcon,
+  List as ListIcon
 } from '@mui/icons-material';
-import { format, isToday, isFuture, isPast, startOfDay } from 'date-fns';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  LineChart,
+  Line
+} from 'recharts';
+import { format, isToday, isFuture, isPast, startOfDay, subDays, eachDayOfInterval } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 function App() {
@@ -52,6 +71,7 @@ function App() {
     priority: '보통'
   });
   const [currentTab, setCurrentTab] = useState(0);
+  const [view, setView] = useState('list'); // 'list' or 'dashboard'
 
   const categories = ['업무', '개인', '회의', '기타'];
   const priorities = ['낮음', '보통', '높음'];
@@ -139,6 +159,139 @@ function App() {
     }
   };
 
+  // 대시보드 데이터 계산 함수들
+  const getCategoryStats = () => {
+    const stats = {};
+    tasks.forEach(task => {
+      if (!stats[task.category]) {
+        stats[task.category] = {
+          name: task.category,
+          total: 0,
+          completed: 0
+        };
+      }
+      stats[task.category].total += 1;
+      if (task.completed) {
+        stats[task.category].completed += 1;
+      }
+    });
+    return Object.values(stats);
+  };
+
+  const getPriorityStats = () => {
+    const stats = {};
+    tasks.forEach(task => {
+      if (!stats[task.priority]) {
+        stats[task.priority] = {
+          name: task.priority,
+          value: 0
+        };
+      }
+      stats[task.priority].value += 1;
+    });
+    return Object.values(stats);
+  };
+
+  const getCompletionTrend = () => {
+    const last7Days = eachDayOfInterval({
+      start: subDays(new Date(), 6),
+      end: new Date()
+    });
+
+    return last7Days.map(date => {
+      const dayTasks = tasks.filter(task => {
+        const taskDate = startOfDay(new Date(task.dueDate));
+        return taskDate.getTime() === startOfDay(date).getTime();
+      });
+
+      const completedTasks = dayTasks.filter(task => task.completed);
+      const completionRate = dayTasks.length > 0 
+        ? (completedTasks.length / dayTasks.length) * 100 
+        : 0;
+
+      return {
+        date: format(date, 'MM/dd'),
+        완료율: Math.round(completionRate)
+      };
+    });
+  };
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+
+  const renderDashboard = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={6}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              카테고리별 업무 현황
+            </Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={getCategoryStats()}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="total" name="전체" fill="#8884d8" />
+                <Bar dataKey="completed" name="완료" fill="#82ca9d" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </Grid>
+      
+      <Grid item xs={12} md={6}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              우선순위 분포
+            </Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={getPriorityStats()}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {getPriorityStats().map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      <Grid item xs={12}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              최근 7일간 완료율 추이
+            </Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={getCompletionTrend()}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="완료율" stroke="#8884d8" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  );
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
       <Box sx={{ flexGrow: 1 }}>
@@ -147,6 +300,19 @@ function App() {
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               일일 업무 기록
             </Typography>
+            <ToggleButtonGroup
+              value={view}
+              exclusive
+              onChange={(e, newView) => newView && setView(newView)}
+              sx={{ mr: 2, bgcolor: 'white' }}
+            >
+              <ToggleButton value="list">
+                <ListIcon />
+              </ToggleButton>
+              <ToggleButton value="dashboard">
+                <DashboardIcon />
+              </ToggleButton>
+            </ToggleButtonGroup>
             <IconButton color="inherit" onClick={() => setOpenDialog(true)}>
               <AddIcon />
             </IconButton>
@@ -154,97 +320,101 @@ function App() {
         </AppBar>
 
         <Container maxWidth="md" sx={{ mt: 4 }}>
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <DatePicker
-                      value={selectedDate}
-                      onChange={setSelectedDate}
-                      renderInput={(params) => <TextField {...params} />}
-                    />
-                  </Box>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="h6" gutterBottom>
-                      오늘의 달성률
-                    </Typography>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={getCompletionRate()} 
-                      sx={{ height: 10, borderRadius: 5 }}
-                    />
-                    <Typography variant="body2" color="text.secondary" align="right" sx={{ mt: 1 }}>
-                      {Math.round(getCompletionRate())}%
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Paper sx={{ p: 2 }}>
-                <Tabs value={currentTab} onChange={handleTabChange} centered sx={{ mb: 2 }}>
-                  <Tab label="전체" />
-                  <Tab label="진행 중" />
-                  <Tab label="완료" />
-                </Tabs>
-
-                <List>
-                  {getTasksByStatus().map((task) => (
-                    <ListItem
-                      key={task.id}
-                      sx={{
-                        mb: 1,
-                        bgcolor: 'background.paper',
-                        borderRadius: 1,
-                        '&:hover': { bgcolor: 'action.hover' }
-                      }}
-                    >
-                      <IconButton onClick={() => handleToggleTask(task.id)}>
-                        {task.completed ? 
-                          <CheckCircleIcon color="success" /> : 
-                          <UncheckedIcon />
-                        }
-                      </IconButton>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography
-                              sx={{
-                                textDecoration: task.completed ? 'line-through' : 'none',
-                                color: task.completed ? 'text.secondary' : 'text.primary'
-                              }}
-                            >
-                              {task.text}
-                            </Typography>
-                            <Chip 
-                              label={task.category} 
-                              size="small" 
-                              sx={{ ml: 1 }}
-                            />
-                            <Chip 
-                              label={task.priority} 
-                              size="small"
-                              sx={{ 
-                                ml: 1,
-                                bgcolor: getPriorityColor(task.priority),
-                                color: 'white'
-                              }}
-                            />
-                          </Box>
-                        }
-                        secondary={format(new Date(task.dueDate), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
+          {view === 'list' ? (
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <DatePicker
+                        value={selectedDate}
+                        onChange={setSelectedDate}
+                        renderInput={(params) => <TextField {...params} />}
                       />
-                      <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItem>
-                  ))}
-                </List>
-              </Paper>
+                    </Box>
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        오늘의 달성률
+                      </Typography>
+                      <LinearProgress 
+                        variant="determinate" 
+                        value={getCompletionRate()} 
+                        sx={{ height: 10, borderRadius: 5 }}
+                      />
+                      <Typography variant="body2" color="text.secondary" align="right" sx={{ mt: 1 }}>
+                        {Math.round(getCompletionRate())}%
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Paper sx={{ p: 2 }}>
+                  <Tabs value={currentTab} onChange={handleTabChange} centered sx={{ mb: 2 }}>
+                    <Tab label="전체" />
+                    <Tab label="진행 중" />
+                    <Tab label="완료" />
+                  </Tabs>
+
+                  <List>
+                    {getTasksByStatus().map((task) => (
+                      <ListItem
+                        key={task.id}
+                        sx={{
+                          mb: 1,
+                          bgcolor: 'background.paper',
+                          borderRadius: 1,
+                          '&:hover': { bgcolor: 'action.hover' }
+                        }}
+                      >
+                        <IconButton onClick={() => handleToggleTask(task.id)}>
+                          {task.completed ? 
+                            <CheckCircleIcon color="success" /> : 
+                            <UncheckedIcon />
+                          }
+                        </IconButton>
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography
+                                sx={{
+                                  textDecoration: task.completed ? 'line-through' : 'none',
+                                  color: task.completed ? 'text.secondary' : 'text.primary'
+                                }}
+                              >
+                                {task.text}
+                              </Typography>
+                              <Chip 
+                                label={task.category} 
+                                size="small" 
+                                sx={{ ml: 1 }}
+                              />
+                              <Chip 
+                                label={task.priority} 
+                                size="small"
+                                sx={{ 
+                                  ml: 1,
+                                  bgcolor: getPriorityColor(task.priority),
+                                  color: 'white'
+                                }}
+                              />
+                            </Box>
+                          }
+                          secondary={format(new Date(task.dueDate), 'yyyy년 MM월 dd일 HH:mm', { locale: ko })}
+                        />
+                        <IconButton edge="end" onClick={() => handleDeleteTask(task.id)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Paper>
+              </Grid>
             </Grid>
-          </Grid>
+          ) : (
+            renderDashboard()
+          )}
         </Container>
 
         <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
