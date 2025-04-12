@@ -2,17 +2,19 @@
   "name": "daily-task-manager",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://[your-github-username].github.io/daily-task-manager",
+  "homepage": "https://rayk2234.github.io/daily-task-manager",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^7.0.2",
     "@mui/material": "^7.0.2",
+    "@mui/x-date-pickers": "^7.28.3",
     "cra-template-pwa": "2.0.0",
     "date-fns": "^4.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "web-vitals": "^4.2.4"
   },
   "scripts": {
     "start": "react-scripts start",
