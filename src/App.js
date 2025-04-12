@@ -56,7 +56,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { format, isToday, isFuture, isPast, startOfDay, subDays, eachDayOfInterval } from 'date-fns';
+import { format, isToday, isFuture, isPast, startOfDay, subDays, eachDayOfInterval, addDays, isSameDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 function App() {
@@ -72,9 +72,17 @@ function App() {
   });
   const [currentTab, setCurrentTab] = useState(0);
   const [view, setView] = useState('list'); // 'list' or 'dashboard'
+  const [recurringTasks, setRecurringTasks] = useState([]);
 
   const categories = ['업무', '개인', '회의', '기타'];
   const priorities = ['낮음', '보통', '높음'];
+
+  // 반복 업무 패턴 타입
+  const RECURRING_PATTERNS = {
+    DAILY: 'daily',
+    WEEKLY: 'weekly',
+    MONTHLY: 'monthly'
+  };
 
   useEffect(() => {
     const savedTasks = localStorage.getItem('tasks');
@@ -292,6 +300,113 @@ function App() {
     </Grid>
   );
 
+  // 반복 업무 생성 함수
+  const createRecurringTask = (task, pattern, endDate) => {
+    const newRecurringTask = {
+      ...task,
+      id: Date.now(),
+      isRecurring: true,
+      pattern,
+      endDate,
+      lastGenerated: new Date()
+    };
+    setRecurringTasks([...recurringTasks, newRecurringTask]);
+    return newRecurringTask;
+  };
+
+  // 반복 업무 자동 생성 함수
+  const generateRecurringTasks = () => {
+    const today = new Date();
+    const newTasks = [];
+
+    recurringTasks.forEach(recurringTask => {
+      if (recurringTask.endDate && new Date(recurringTask.endDate) < today) {
+        return; // 종료일이 지난 반복 업무는 건너뜀
+      }
+
+      const lastGenerated = new Date(recurringTask.lastGenerated);
+      let shouldGenerate = false;
+
+      switch (recurringTask.pattern) {
+        case RECURRING_PATTERNS.DAILY:
+          shouldGenerate = !isSameDay(lastGenerated, today);
+          break;
+        case RECURRING_PATTERNS.WEEKLY:
+          shouldGenerate = !isSameDay(lastGenerated, today) && 
+                          today.getDay() === new Date(recurringTask.dueDate).getDay();
+          break;
+        case RECURRING_PATTERNS.MONTHLY:
+          shouldGenerate = !isSameDay(lastGenerated, today) && 
+                          today.getDate() === new Date(recurringTask.dueDate).getDate();
+          break;
+      }
+
+      if (shouldGenerate) {
+        const newTask = {
+          ...recurringTask,
+          id: Date.now(),
+          createdDate: today,
+          dueDate: today,
+          completed: false,
+          isRecurring: false
+        };
+        newTasks.push(newTask);
+        
+        // 마지막 생성일 업데이트
+        recurringTask.lastGenerated = today;
+      }
+    });
+
+    if (newTasks.length > 0) {
+      setTasks([...tasks, ...newTasks]);
+    }
+  };
+
+  // 매일 자정에 반복 업무 생성
+  useEffect(() => {
+    const checkAndGenerateTasks = () => {
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() === 0) {
+        generateRecurringTasks();
+      }
+    };
+
+    const interval = setInterval(checkAndGenerateTasks, 60000); // 1분마다 체크
+    return () => clearInterval(interval);
+  }, [recurringTasks]);
+
+  // 반복 업무 추가 다이얼로그
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [recurringTaskData, setRecurringTaskData] = useState({
+    text: '',
+    category: '업무',
+    dueDate: new Date(),
+    priority: '보통',
+    pattern: RECURRING_PATTERNS.DAILY,
+    endDate: null
+  });
+
+  const handleAddRecurringTask = () => {
+    if (recurringTaskData.text.trim()) {
+      const newTask = {
+        text: recurringTaskData.text,
+        category: recurringTaskData.category,
+        dueDate: recurringTaskData.dueDate,
+        priority: recurringTaskData.priority
+      };
+      createRecurringTask(newTask, recurringTaskData.pattern, recurringTaskData.endDate);
+      setRecurringTaskData({
+        text: '',
+        category: '업무',
+        dueDate: new Date(),
+        priority: '보통',
+        pattern: RECURRING_PATTERNS.DAILY,
+        endDate: null
+      });
+      setRecurringDialogOpen(false);
+    }
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ko}>
       <Box sx={{ flexGrow: 1 }}>
@@ -315,6 +430,9 @@ function App() {
             </ToggleButtonGroup>
             <IconButton color="inherit" onClick={() => setOpenDialog(true)}>
               <AddIcon />
+            </IconButton>
+            <IconButton color="inherit" onClick={() => setRecurringDialogOpen(true)}>
+              <CalendarIcon />
             </IconButton>
           </Toolbar>
         </AppBar>
@@ -462,6 +580,74 @@ function App() {
           <DialogActions>
             <Button onClick={() => setOpenDialog(false)}>취소</Button>
             <Button onClick={handleAddTask} variant="contained">추가</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* 반복 업무 추가 다이얼로그 */}
+        <Dialog open={recurringDialogOpen} onClose={() => setRecurringDialogOpen(false)}>
+          <DialogTitle>반복 업무 추가</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="업무 내용"
+              fullWidth
+              value={recurringTaskData.text}
+              onChange={(e) => setRecurringTaskData({ ...recurringTaskData, text: e.target.value })}
+            />
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel>카테고리</InputLabel>
+              <Select
+                value={recurringTaskData.category}
+                onChange={(e) => setRecurringTaskData({ ...recurringTaskData, category: e.target.value })}
+              >
+                {categories.map((category) => (
+                  <MenuItem key={category} value={category}>{category}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel>우선순위</InputLabel>
+              <Select
+                value={recurringTaskData.priority}
+                onChange={(e) => setRecurringTaskData({ ...recurringTaskData, priority: e.target.value })}
+              >
+                {priorities.map((priority) => (
+                  <MenuItem key={priority} value={priority}>{priority}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel>반복 패턴</InputLabel>
+              <Select
+                value={recurringTaskData.pattern}
+                onChange={(e) => setRecurringTaskData({ ...recurringTaskData, pattern: e.target.value })}
+              >
+                <MenuItem value={RECURRING_PATTERNS.DAILY}>매일</MenuItem>
+                <MenuItem value={RECURRING_PATTERNS.WEEKLY}>매주</MenuItem>
+                <MenuItem value={RECURRING_PATTERNS.MONTHLY}>매월</MenuItem>
+              </Select>
+            </FormControl>
+            <Box sx={{ mt: 2 }}>
+              <DatePicker
+                label="시작일"
+                value={recurringTaskData.dueDate}
+                onChange={(date) => setRecurringTaskData({ ...recurringTaskData, dueDate: date })}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </Box>
+            <Box sx={{ mt: 2 }}>
+              <DatePicker
+                label="종료일 (선택사항)"
+                value={recurringTaskData.endDate}
+                onChange={(date) => setRecurringTaskData({ ...recurringTaskData, endDate: date })}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRecurringDialogOpen(false)}>취소</Button>
+            <Button onClick={handleAddRecurringTask} variant="contained">추가</Button>
           </DialogActions>
         </Dialog>
       </Box>
