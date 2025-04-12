@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/daily-task-manager/static/css/main.4c7638ae.css",
+    "main.js": "/daily-task-manager/static/js/main.f9c40b49.js",
+    "static/js/488.f01c777e.chunk.js": "/daily-task-manager/static/js/488.f01c777e.chunk.js",
+    "service-worker.js": "/daily-task-manager/service-worker.js",
+    "index.html": "/daily-task-manager/index.html",
+    "main.4c7638ae.css.map": "/daily-task-manager/static/css/main.4c7638ae.css.map",
+    "main.f9c40b49.js.map": "/daily-task-manager/static/js/main.f9c40b49.js.map",
+    "488.f01c777e.chunk.js.map": "/daily-task-manager/static/js/488.f01c777e.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.4c7638ae.css",
+    "static/js/main.f9c40b49.js"
+  ]
+}
